@@ -123,7 +123,7 @@
     line-height: 1.15;
   }
   .rank {
-    font-size: 38px;
+    font-size: 58px;
     font-weight: 700;
     color: var(--live);
   }
@@ -283,6 +283,10 @@
       logoPath: t => `ncaa/500-dark/${t.id}`,
       name: t => t.location,
       ranked: true,
+      // Only games with a Top 25 team, plus these teams every week
+      // (ESPN team IDs: 57 = Florida, 130 = Michigan). ?all=1 shows every FBS game.
+      keep: params.get('all') ? null
+        : g => [g.away, g.home].some(t => t.rank || ['57', '130'].includes(t.id)),
     },
     nfl: {
       api: ESPN + 'nfl/scoreboard',
@@ -342,7 +346,8 @@
       const res = await fetch(L.api, { cache: 'no-store' });
       if (!res.ok) throw new Error(res.status);
       const data = await res.json();
-      games = (data.events || []).map(ev => parseEvent(ev, L)).filter(Boolean);
+      games = (data.events || []).map(ev => parseEvent(ev, L)).filter(Boolean)
+        .filter(g => !L.keep || L.keep(g));
       lastGood = Date.now();
       const wk = data.week && data.week.number;
       const post = data.season && data.season.type === 3;
@@ -467,7 +472,7 @@
     const showScore = g.state !== 'pre' && t.score != null && t.score !== '';
     const loser = g.state === 'post' && !t.winner && (g.away.winner || g.home.winner);
     const hasPoss = g.state === 'in' && g.situation && g.situation.possession === t.id;
-    const name = `<div class="name-row">${t.rank ? `<span class="rank">#${t.rank}</span>` : ''}<span class="name${hasPoss ? ' possession' : ''}">${esc(t.name)}</span></div>`;
+    const name = `<div class="name-row">${t.rank ? `<span class="rank">${t.rank}</span>` : ''}<span class="name${hasPoss ? ' possession' : ''}">${esc(t.name)}</span></div>`;
     const mark = `<div class="mark">${showScore
       ? `<span class="score">${esc(t.score)}</span>`
       : `<img class="logo" alt="" src="${esc(t.logo)}" data-fallback="${esc(t.logoFallback)}">`}</div>`;
