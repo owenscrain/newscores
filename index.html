@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>College Football Scores</title>
+<title>Football Scores</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&family=Oswald:wght@500;700&display=swap" rel="stylesheet">
@@ -274,8 +274,33 @@
   // groups=80 is all FBS games. Pass ?groups=8 (SEC), ?groups=5 (Big Ten), etc.
   // or ?top25=1 for ESPN's default (ranked-team) slate.
   const GROUPS = params.get('top25') ? null : (params.get('groups') || '80');
-  const API = 'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard'
-    + '?limit=300' + (GROUPS ? '&groups=' + encodeURIComponent(GROUPS) : '');
+  const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/football/';
+  const LEAGUES = {
+    cfb: {
+      api: ESPN + 'college-football/scoreboard?limit=300' + (GROUPS ? '&groups=' + encodeURIComponent(GROUPS) : ''),
+      label: 'CFB',
+      postLabel: 'BOWLS',
+      logoPath: t => `ncaa/500-dark/${t.id}`,
+      name: t => t.location,
+      ranked: true,
+    },
+    nfl: {
+      api: ESPN + 'nfl/scoreboard',
+      label: 'NFL',
+      postLabel: 'PLAYOFFS',
+      logoPath: t => `nfl/500-dark/${(t.abbreviation || '').toLowerCase()}`,
+      name: t => t.name,
+      ranked: false,
+    },
+  };
+  // NFL on Sundays and Mondays (Chicago time), college football Tuesday-Saturday.
+  // ?league=nfl or ?league=cfb forces one.
+  function leagueForToday() {
+    const forced = params.get('league');
+    if (LEAGUES[forced]) return forced;
+    const day = new Date().toLocaleDateString('en-US', { weekday: 'short', timeZone: TZ });
+    return day === 'Sun' || day === 'Mon' ? 'nfl' : 'cfb';
+  }
 
   const stage = document.getElementById('stage');
   const card = document.getElementById('card');
@@ -313,17 +338,18 @@
 
   async function load() {
     try {
-      const res = await fetch(API, { cache: 'no-store' });
+      const L = LEAGUES[leagueForToday()];
+      const res = await fetch(L.api, { cache: 'no-store' });
       if (!res.ok) throw new Error(res.status);
       const data = await res.json();
-      games = (data.events || []).map(parseEvent).filter(Boolean);
+      games = (data.events || []).map(ev => parseEvent(ev, L)).filter(Boolean);
       lastGood = Date.now();
       const wk = data.week && data.week.number;
       const post = data.season && data.season.type === 3;
       const label = document.createElement('span');
       // Short label so the header text can stay at full size.
-      label.textContent = post ? 'CFB · BOWLS'
-        : wk ? `CFB · WEEK ${wk}` : 'COLLEGE FOOTBALL';
+      label.textContent = post ? `${L.label} · ${L.postLabel}`
+        : wk ? `${L.label} · WEEK ${wk}` : L.label;
       header.replaceChildren(label);
       // Shrink the header text if it would run into the bar's side padding.
       let size = 62;
@@ -338,7 +364,7 @@
     setTimeout(load, anyLive ? 15000 : 60000);
   }
 
-  function parseEvent(ev) {
+  function parseEvent(ev, L) {
     const comp = ev.competitions && ev.competitions[0];
     if (!comp) return null;
     const side = ha => {
@@ -347,13 +373,13 @@
       const rank = c.curatedRank && c.curatedRank.current;
       return {
         id: t.id,
-        name: t.location || t.shortDisplayName || t.displayName || t.abbreviation,
+        name: L.name(t) || t.shortDisplayName || t.displayName || t.abbreviation,
         abbr: t.abbreviation || '',
-        rank: rank && rank <= 25 ? rank : null,
+        rank: L.ranked && rank && rank <= 25 ? rank : null,
         score: c.score,
         winner: !!c.winner,
         color: pickColor(t.color, t.alternateColor),
-        logo: t.id ? `https://a.espncdn.com/i/teamlogos/ncaa/500-dark/${t.id}.png` : t.logo,
+        logo: t.id ? `https://a.espncdn.com/i/teamlogos/${L.logoPath(t)}.png` : t.logo,
         logoFallback: t.logo,
       };
     };
