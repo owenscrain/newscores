@@ -51,12 +51,11 @@
     flex: none;
     background: var(--chrome);
     font-family: var(--chrome-font);
-    font-size: 50px;
+    font-size: 62px;
     font-weight: 700;
     line-height: 1;
-    /* Bar height stays at the original 90px; only the text inside grew. */
     box-sizing: border-box;
-    height: 90px;
+    height: 112px;
     padding: 0 29px;
     display: flex;
     align-items: center;
@@ -309,11 +308,12 @@
       const wk = data.week && data.week.number;
       const post = data.season && data.season.type === 3;
       const label = document.createElement('span');
-      label.textContent = post ? 'COLLEGE FOOTBALL · BOWLS'
-        : wk ? `COLLEGE FOOTBALL · WEEK ${wk}` : 'COLLEGE FOOTBALL';
+      // Short label so the header text can stay at full size.
+      label.textContent = post ? 'CFB · BOWLS'
+        : wk ? `CFB · WEEK ${wk}` : 'COLLEGE FOOTBALL';
       header.replaceChildren(label);
       // Shrink the header text if it would run into the bar's side padding.
-      let size = 50;
+      let size = 62;
       header.style.fontSize = size + 'px';
       while (label.offsetWidth > header.clientWidth - 58 && size > 30) {
         header.style.fontSize = --size + 'px';
@@ -346,7 +346,6 @@
     };
     const st = ev.status || {};
     const type = st.type || {};
-    const b = (comp.broadcasts || []).flatMap(x => x.names || []);
     return {
       id: ev.id,
       date: new Date(ev.date),
@@ -356,7 +355,6 @@
       shortDetail: type.shortDetail || '',
       period: st.period,
       clock: st.displayClock,
-      network: b[0] || '',
       situation: comp.situation || null,
       away: side('away'),
       home: side('home'),
@@ -404,7 +402,8 @@
       else main = `${periodLabel(g.period)} ${g.clock}`;
       let detail = '';
       const s = g.situation;
-      if (s && s.downDistanceText) {
+      const onBreak = g.statusName === 'STATUS_HALFTIME' || g.statusName === 'STATUS_END_PERIOD';
+      if (s && s.downDistanceText && !onBreak) {
         const pos = [g.away, g.home].find(t => t.id === s.possession);
         detail = (pos ? pos.abbr + ' · ' : '') + s.downDistanceText;
       }
@@ -416,13 +415,13 @@
     }
     // pre-game (also postponed / canceled, which ESPN reports as "pre" or "post")
     if (g.statusName && !/SCHEDULED/.test(g.statusName)) {
-      return { main: g.shortDetail || 'TBD', detail: g.network };
+      return { main: g.shortDetail || 'TBD', detail: '' };
     }
     const day = g.date.toLocaleDateString([], { weekday: 'short' });
     const time = g.timeValid
       ? g.date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
       : 'TBD';
-    return { main: `${day} ${time}`, detail: g.network };
+    return { main: `${day} ${time}`, detail: '' };
   }
 
   function teamHTML(t, g, bottom) {
