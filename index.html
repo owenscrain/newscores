@@ -309,13 +309,14 @@
       ranked: false,
     },
   };
-  // NFL on Sundays and Mondays (Chicago time), college football Tuesday-Saturday.
+  // NFL on Thursdays, Sundays and Mondays (Chicago time); college football
+  // Tuesday, Wednesday, Friday and Saturday.
   // ?league=nfl or ?league=cfb forces one.
   function leagueForToday() {
     const forced = params.get('league');
     if (LEAGUES[forced]) return forced;
     const day = new Date().toLocaleDateString('en-US', { weekday: 'short', timeZone: TZ });
-    return day === 'Sun' || day === 'Mon' ? 'nfl' : 'cfb';
+    return ['Thu', 'Sun', 'Mon'].includes(day) ? 'nfl' : 'cfb';
   }
 
   const stage = document.getElementById('stage');
