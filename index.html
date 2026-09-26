@@ -64,12 +64,15 @@
   }
   header.bar { justify-content: center; }
   footer.bar { justify-content: space-between; }
-  footer.bar { background: #62361b; }  /* CTA Brown Line */
+  footer.bar {
+    background: #62361b;  /* CTA Brown Line */
+    border-top: 4px solid #a9a9a9;
+  }
   #clock, #trains { font-variant-numeric: tabular-nums; }
   /* Schedule-based prediction (train isn't reporting its live location). */
   .train-sched { color: #a9a9a9; }
   .train-unit {
-    font-size: 39px;
+    font-size: 50px;
     font-weight: 500;
     opacity: 0.85;
   }
@@ -162,15 +165,12 @@
 
   .status {
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
     width: 100%;
-    /* Fixed height so the teams never shift; a lone line (e.g. FINAL) centers. */
+    /* Fixed height so the teams never shift between game states. */
     height: 160px;
   }
-  .status-detail:empty { display: none; }
   .status-main {
     display: flex;
     align-items: center;
@@ -179,16 +179,6 @@
     font-size: 76px;
     font-weight: 700;
     line-height: 1.3;
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
-  .status-detail {
-    height: 44px;
-    font-family: var(--display-font);
-    font-size: 36px;
-    font-weight: 500;
-    line-height: 44px;
-    color: var(--text-mid);
     text-transform: uppercase;
     white-space: nowrap;
   }
@@ -447,30 +437,23 @@
       if (g.statusName === 'STATUS_HALFTIME') main = 'Halftime';
       else if (g.statusName === 'STATUS_END_PERIOD') main = 'End ' + periodLabel(g.period);
       else main = `${periodLabel(g.period)} ${g.clock}`;
-      let detail = '';
-      const s = g.situation;
-      const onBreak = g.statusName === 'STATUS_HALFTIME' || g.statusName === 'STATUS_END_PERIOD';
-      if (s && s.downDistanceText && !onBreak) {
-        const pos = [g.away, g.home].find(t => t.id === s.possession);
-        detail = (pos ? pos.abbr + ' · ' : '') + s.downDistanceText;
-      }
-      return { main, detail, dot: true };
+      return { main, dot: true };
     }
     if (g.state === 'post') {
       const d = g.shortDetail.toUpperCase();
-      return { main: d.startsWith('FINAL') ? d : (d || 'FINAL'), detail: '' };
+      return { main: d.startsWith('FINAL') ? d : (d || 'FINAL') };
     }
     // pre-game (also postponed / canceled, which ESPN reports as "pre" or "post")
     if (g.statusName && !/SCHEDULED/.test(g.statusName)) {
-      return { main: g.shortDetail || 'TBD', detail: '' };
+      return { main: g.shortDetail || 'TBD' };
     }
     // Games later today show just the time; other days get the weekday too.
     const ymd = d => d.toLocaleDateString('en-CA', { timeZone: TZ });
     const isToday = ymd(g.date) === ymd(new Date());
     const day = isToday ? 'Today' : g.date.toLocaleDateString([], { weekday: 'short', timeZone: TZ });
-    if (!g.timeValid) return { main: `${day} TBD`, detail: '' };
+    if (!g.timeValid) return { main: `${day} TBD` };
     const time = g.date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: TZ });
-    return { main: isToday ? time : `${day} ${time}`, detail: '' };
+    return { main: isToday ? time : `${day} ${time}` };
   }
 
   const BALL_SVG = '<svg class="ball" viewBox="0 0 64 40" aria-hidden="true">'
@@ -502,7 +485,6 @@
       teamHTML(g.away, g, false) +
       `<div class="status">
          <div class="status-main">${s.dot ? '<span class="dot"></span>' : ''}<span>${esc(s.main)}</span></div>
-         <div class="status-detail">${esc(s.detail)}</div>
        </div>` +
       teamHTML(g.home, g, true) +
       '<div class="progress"></div>';
@@ -515,7 +497,6 @@
     });
     fitText(card.querySelectorAll('.name-row'), 76, '.name');
     fitText(card.querySelectorAll('.status-main'), 76);
-    fitText(card.querySelectorAll('.status-detail'), 36);
 
     startProgress();
   }
@@ -526,7 +507,7 @@
     requestAnimationFrame(() => requestAnimationFrame(() => bar.classList.add('run')));
   }
 
-  // Shrink long team names / details until they fit the card width.
+  // Shrink long team names / status text until they fit the card width.
   function fitText(els, base, sel) {
     const max = card.clientWidth - 58;
     els.forEach(el => {
@@ -593,9 +574,11 @@
       const res = await fetch('/api/cta', { cache: 'no-store' });
       if (!res.ok) throw new Error(res.status);
       const { arrivals } = await res.json();
-      // Next two trains, e.g. "DUE, 11 min".
-      // Trains without live tracking (schedule only) show in grey.
-      const parts = (arrivals || []).slice(0, 2).map(a => {
+      // Up to two trains that are reporting a live location, e.g. "DUE, 11 min".
+      // If none are, fall back to the next scheduled departure, shown in grey.
+      const live = (arrivals || []).filter(a => !a.scheduled);
+      const shown = live.length ? live.slice(0, 2) : (arrivals || []).slice(0, 1);
+      const parts = shown.map(a => {
         const text = a.approaching || a.minutes <= 1 ? 'DUE'
           : `${a.minutes}<span class="train-unit">\u2009min</span>`;
         return a.scheduled ? `<span class="train-sched">${text}</span>` : text;
