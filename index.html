@@ -64,27 +64,10 @@
   }
   header.bar { justify-content: center; }
   footer.bar { justify-content: space-between; }
-  #clock, #train-min { font-variant-numeric: tabular-nums; }
-  .train {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .line-dot {
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    background: #62361b;  /* CTA Brown Line */
-    border: 3px solid #fff;
-    box-sizing: border-box;
-    flex: none;
-  }
-  .train-time {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    margin-left: 8px;
-  }
+  footer.bar { background: #62361b; }  /* CTA Brown Line */
+  #clock, #trains { font-variant-numeric: tabular-nums; }
+  /* Schedule-based prediction (train isn't reporting its live location). */
+  .train-sched { color: #a9a9a9; }
   .train-unit {
     font-size: 39px;
     font-weight: 500;
@@ -281,15 +264,15 @@
 </head>
 <body>
 <div id="stage">
-  <header class="bar" id="header">COLLEGE FOOTBALL</header>
+  <header class="bar"><span id="clock"></span></header>
   <main>
     <div class="card" id="card">
       <div class="message">Loading scores</div>
     </div>
   </main>
   <footer class="bar">
-    <span class="train"><span class="line-dot"></span><span class="line-dest">Lp</span><span class="train-time"><span id="train-min">&ndash;</span><span class="train-unit" id="train-unit"></span></span></span>
-    <span id="clock"></span>
+    <span>Loop</span>
+    <span id="trains">&ndash;</span>
   </footer>
 </div>
 
@@ -307,8 +290,6 @@
   const LEAGUES = {
     cfb: {
       api: ESPN + 'college-football/scoreboard?limit=300' + (GROUPS ? '&groups=' + encodeURIComponent(GROUPS) : ''),
-      label: 'CFB',
-      postLabel: 'BOWLS',
       logo: NCAA_LOGO,
       logoPath: t => `ncaa/500-dark/${t.id}`,
       name: t => t.location,
@@ -324,8 +305,6 @@
     },
     nfl: {
       api: ESPN + 'nfl/scoreboard',
-      label: 'NFL',
-      postLabel: 'PLAYOFFS',
       logo: NFL_LOGO,
       logoPath: t => `nfl/500-dark/${(t.abbreviation || '').toLowerCase()}`,
       name: t => t.name,
@@ -344,9 +323,7 @@
 
   const stage = document.getElementById('stage');
   const card = document.getElementById('card');
-  const header = document.getElementById('header');
-  const trainMin = document.getElementById('train-min');
-  const trainUnit = document.getElementById('train-unit');
+  const trains = document.getElementById('trains');
   // Clock and kickoff times are Chicago time.
   const TZ = 'America/Chicago';
   const clock = document.getElementById('clock');
@@ -387,19 +364,6 @@
         .filter(g => !L.keep || L.keep(g));
       activeLeague = L;
       lastGood = Date.now();
-      const wk = data.week && data.week.number;
-      const post = data.season && data.season.type === 3;
-      const label = document.createElement('span');
-      // Short label so the header text can stay at full size.
-      label.textContent = post ? `${L.label} · ${L.postLabel}`
-        : wk ? `${L.label} · WEEK ${wk}` : L.label;
-      header.replaceChildren(label);
-      // Shrink the header text if it would run into the bar's side padding.
-      let size = 62;
-      header.style.fontSize = size + 'px';
-      while (label.offsetWidth > header.clientWidth - 58 && size > 30) {
-        header.style.fontSize = --size + 'px';
-      }
     } catch (err) {
       console.warn('Score fetch failed; keeping last data', err);
     }
@@ -628,25 +592,20 @@
     try {
       const res = await fetch('/api/cta', { cache: 'no-store' });
       if (!res.ok) throw new Error(res.status);
-      const { next } = await res.json();
-      if (!next) {
-        trainMin.textContent = '\u2013';
-        trainUnit.textContent = '';
-      } else if (next.approaching || next.minutes <= 1) {
-        trainMin.textContent = 'Due';
-        trainUnit.textContent = '';
-      } else {
-        trainMin.textContent = next.minutes;
-        trainUnit.textContent = 'min';
-      }
+      const { arrivals } = await res.json();
+      // Next two trains, e.g. "DUE, 11 min".
+      // Trains without live tracking (schedule only) show in grey.
+      const parts = (arrivals || []).slice(0, 2).map(a => {
+        const text = a.approaching || a.minutes <= 1 ? 'DUE'
+          : `${a.minutes}<span class="train-unit">\u2009min</span>`;
+        return a.scheduled ? `<span class="train-sched">${text}</span>` : text;
+      });
+      trains.innerHTML = parts.length ? parts.join(',\u2002') : '\u2013';
       lastTrain = Date.now();
     } catch (err) {
       console.warn('Train fetch failed', err);
       // Don't leave an old arrival time up for long.
-      if (Date.now() - lastTrain > 2 * 60 * 1000) {
-        trainMin.textContent = '\u2013';
-        trainUnit.textContent = '';
-      }
+      if (Date.now() - lastTrain > 2 * 60 * 1000) trains.textContent = '\u2013';
     }
     setTimeout(loadTrain, 20000);
   }

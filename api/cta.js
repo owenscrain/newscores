@@ -28,7 +28,9 @@ module.exports = async (req, res) => {
     // so their difference is correct regardless of the server's time zone.
     const now = Date.parse(ctatt.tmst);
     const arrivals = (ctatt.eta || [])
-      .filter(e => /loop/i.test(e.destNm))
+      // Loop-bound only: this platform serves Loop-bound trains (trDr 5), but
+      // check the direction and destination anyway.
+      .filter(e => e.trDr === '5' && /loop/i.test(e.destNm))
       .map(e => ({
         minutes: Math.max(0, Math.round((Date.parse(e.arrT) - now) / 60000)),
         approaching: e.isApp === '1',
