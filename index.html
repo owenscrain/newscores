@@ -62,13 +62,23 @@
     white-space: nowrap;
     letter-spacing: 0.01em;
   }
-  header.bar { justify-content: center; }
+  header.bar { justify-content: space-between; }
   footer.bar { justify-content: space-between; }
   footer.bar {
     background: #62361b;  /* CTA Brown Line */
     border-top: 4px solid #a9a9a9;
   }
-  #clock, #trains { font-variant-numeric: tabular-nums; }
+  #clock, #temp, #trains { font-variant-numeric: tabular-nums; }
+  .weather {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .weather svg {
+    width: 70px;
+    height: 70px;
+    flex: none;
+  }
   /* Schedule-based prediction (train isn't reporting its live location). */
   .train-sched { color: #a9a9a9; }
   .train-unit {
@@ -254,7 +264,10 @@
 </head>
 <body>
 <div id="stage">
-  <header class="bar"><span id="clock"></span></header>
+  <header class="bar">
+    <span class="weather"><svg id="wx-icon" viewBox="0 0 64 64" aria-hidden="true"></svg><span id="temp">&ndash;&deg;</span></span>
+    <span id="clock"></span>
+  </header>
   <main>
     <div class="card" id="card">
       <div class="message">Loading scores</div>
@@ -314,7 +327,9 @@
   const stage = document.getElementById('stage');
   const card = document.getElementById('card');
   const trains = document.getElementById('trains');
-  // Clock and kickoff times are Chicago time.
+  const wxIcon = document.getElementById('wx-icon');
+  const temp = document.getElementById('temp');
+  // Clock, kickoff times and weather are all for Chicago.
   const TZ = 'America/Chicago';
   const clock = document.getElementById('clock');
 
@@ -593,6 +608,71 @@
     setTimeout(loadTrain, 20000);
   }
   loadTrain();
+
+  // ---------- Chicago weather (Open-Meteo, no API key) ----------
+  const WX_API = 'https://api.open-meteo.com/v1/forecast?latitude=41.8781&longitude=-87.6298'
+    + '&current=temperature_2m,weather_code,is_day&temperature_unit=fahrenheit&timezone=America%2FChicago';
+
+  // Icons are drawn in currentColor, so they match the temperature text.
+  const SUN = 'currentColor', CLOUD = 'currentColor', DARK_CLOUD = 'currentColor', RAIN = 'currentColor', MOON = 'currentColor';
+
+  function sunSVG(cx, cy, r) {
+    let rays = '';
+    for (let k = 0; k < 8; k++) {
+      const a = k * Math.PI / 4;
+      const x1 = cx + Math.cos(a) * (r + 5), y1 = cy + Math.sin(a) * (r + 5);
+      const x2 = cx + Math.cos(a) * (r + 10), y2 = cy + Math.sin(a) * (r + 10);
+      rays += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`;
+    }
+    return `<g stroke="${SUN}" stroke-width="4" stroke-linecap="round">${rays}</g><circle cx="${cx}" cy="${cy}" r="${r}" fill="${SUN}"/>`;
+  }
+  // Crescent: a full disc with an offset disc masked out of it.
+  const moonSVG = (cx, cy, r) =>
+    `<mask id="moon-cut"><rect width="64" height="64" fill="#fff"/><circle cx="${cx + r * 0.55}" cy="${cy - r * 0.35}" r="${r * 0.85}" fill="#000"/></mask>`
+    + `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${MOON}" mask="url(#moon-cut)"/>`;
+  const CLOUD_SHAPES = '<circle cx="23" cy="37" r="10"/><circle cx="35" cy="30" r="13"/><circle cx="46" cy="38" r="9"/><rect x="13" y="36" width="42" height="14" rx="7"/>';
+  // With one color, a cloud in front of the sun/moon needs a bar-colored
+  // outline to separate the two shapes.
+  const cloudSVG = (dy, fill, outline) =>
+    `<g transform="translate(0 ${dy})">`
+    + (outline ? `<g fill="var(--chrome)" stroke="var(--chrome)" stroke-width="7">${CLOUD_SHAPES}</g>` : '')
+    + `<g fill="${fill}">${CLOUD_SHAPES}</g></g>`;
+
+  function weatherIcon(code, isDay) {
+    const sky = isDay ? sunSVG(32, 32, 12) : moonSVG(30, 34, 22);
+    const smallSky = isDay ? sunSVG(22, 22, 8) : moonSVG(20, 22, 13);
+    if (code === 0) return sky;
+    if (code <= 2) return smallSky + cloudSVG(6, CLOUD, true);
+    if (code === 3) return cloudSVG(0, CLOUD);
+    if (code === 45 || code === 48) {
+      return `<g stroke="${DARK_CLOUD}" stroke-width="5" stroke-linecap="round">`
+        + '<line x1="12" y1="22" x2="52" y2="22"/><line x1="8" y1="32" x2="48" y2="32"/>'
+        + '<line x1="16" y1="42" x2="56" y2="42"/><line x1="12" y1="52" x2="44" y2="52"/></g>';
+    }
+    if (code >= 95) {
+      return cloudSVG(-8, DARK_CLOUD) + `<path fill="${SUN}" d="M35 46 L26 56 H32 L29 64 L40 52 H34 L37 46z"/>`;
+    }
+    if ((code >= 71 && code <= 77) || code === 85 || code === 86) {
+      return cloudSVG(-8, CLOUD) + `<g fill="#ffffff"><circle cx="22" cy="52" r="3.5"/><circle cx="33" cy="58" r="3.5"/><circle cx="44" cy="52" r="3.5"/></g>`;
+    }
+    // Drizzle, rain, freezing rain and showers.
+    return cloudSVG(-8, DARK_CLOUD)
+      + `<g stroke="${RAIN}" stroke-width="4" stroke-linecap="round"><line x1="24" y1="48" x2="20" y2="58"/><line x1="34" y1="48" x2="30" y2="58"/><line x1="44" y1="48" x2="40" y2="58"/></g>`;
+  }
+
+  async function loadWeather() {
+    try {
+      const res = await fetch(WX_API, { cache: 'no-store' });
+      if (!res.ok) throw new Error(res.status);
+      const cur = (await res.json()).current;
+      temp.textContent = Math.round(cur.temperature_2m) + '°';
+      wxIcon.innerHTML = weatherIcon(cur.weather_code, cur.is_day === 1);
+    } catch (err) {
+      console.warn('Weather fetch failed; keeping last reading', err);
+    }
+    setTimeout(loadWeather, 10 * 60 * 1000);
+  }
+  loadWeather();
 
   load().then(next);
 })();
