@@ -216,15 +216,19 @@
   .team.loser .score { color: var(--text-mid); }
   .team.loser .accent { background: var(--text-dim) !important; }
 
-  .possession::before {
-    content: '';
-    display: inline-block;
-    width: 0; height: 0;
-    border-top: 14px solid transparent;
-    border-bottom: 14px solid transparent;
-    border-left: 20px solid var(--live);
-    margin-right: 4px;
-    align-self: center;
+  /* Pulsing football to the right of the team with the ball. It's positioned
+     off the name so the name itself stays centered. */
+  .name { position: relative; }
+  .ball {
+    position: absolute;
+    left: calc(100% + 18px);
+    top: 50%;
+    width: 80px;
+    height: 50px;
+    margin-top: -25px;
+    color: var(--live);
+    filter: drop-shadow(0 0 6px rgba(255,176,32,0.55));
+    animation: pulse 1.6s ease-in-out infinite;
   }
 
   /* 6-second dwell indicator along the bottom edge of the card. */
@@ -296,8 +300,12 @@
       ranked: true,
       // Only games with a Top 25 team, plus these teams every week
       // (ESPN team IDs: 57 = Florida, 130 = Michigan). ?all=1 shows every FBS game.
+      // Always: games with a Top 25 team, plus Florida and Michigan
+      // (ESPN team IDs 57 and 130). While live: also any Big Ten or SEC game
+      // (ESPN conference IDs 5 and 8). ?all=1 shows every FBS game.
       keep: params.get('all') ? null
-        : g => [g.away, g.home].some(t => t.rank || ['57', '130'].includes(t.id)),
+        : g => [g.away, g.home].some(t => t.rank || ['57', '130'].includes(t.id)
+          || (g.state === 'in' && ['5', '8'].includes(t.conf))),
     },
     nfl: {
       api: ESPN + 'nfl/scoreboard',
@@ -395,6 +403,7 @@
         id: t.id,
         name: L.name(t) || t.shortDisplayName || t.displayName || t.abbreviation,
         abbr: t.abbreviation || '',
+        conf: t.conferenceId,
         rank: L.ranked && rank && rank <= 25 ? rank : null,
         score: c.score,
         winner: !!c.winner,
@@ -483,11 +492,20 @@
     return { main: `${day} ${time}`, detail: '' };
   }
 
+  const BALL_SVG = '<svg class="ball" viewBox="0 0 64 40" aria-hidden="true">'
+    + '<path fill="currentColor" d="M3 20C13 1 51 1 61 20C51 39 13 39 3 20Z"/>'
+    + '<g stroke="var(--surface)" stroke-width="3" stroke-linecap="round">'
+    + '<line x1="21" y1="20" x2="43" y2="20"/>'
+    + '<line x1="25" y1="15" x2="25" y2="25"/><line x1="30" y1="15" x2="30" y2="25"/>'
+    + '<line x1="35" y1="15" x2="35" y2="25"/><line x1="40" y1="15" x2="40" y2="25"/>'
+    + '<path fill="none" d="M11 11C9 16 9 24 11 29M53 11C55 16 55 24 53 29"/></g></svg>';
+
   function teamHTML(t, g, bottom) {
     const showScore = g.state !== 'pre' && t.score != null && t.score !== '';
     const loser = g.state === 'post' && !t.winner && (g.away.winner || g.home.winner);
-    const hasPoss = g.state === 'in' && g.situation && g.situation.possession === t.id;
-    const name = `<div class="name-row">${t.rank ? `<span class="rank">${t.rank}</span>` : ''}<span class="name${hasPoss ? ' possession' : ''}">${esc(t.name)}</span></div>`;
+    const hasPoss = g.state === 'in' && g.statusName !== 'STATUS_HALFTIME'
+      && g.situation && g.situation.possession === t.id;
+    const name = `<div class="name-row">${t.rank ? `<span class="rank">${t.rank}</span>` : ''}<span class="name">${esc(t.name)}${hasPoss ? BALL_SVG : ''}</span></div>`;
     const mark = `<div class="mark">${showScore
       ? `<span class="score">${esc(t.score)}</span>`
       : `<img class="logo" alt="" src="${esc(t.logo)}" data-fallback="${esc(t.logoFallback)}">`}</div>`;
