@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>College Football Scores</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&family=Oswald:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e14;
+    --surface: #11161f;
+    --surface-raised: #161d29;
+    --line: rgba(255,255,255,0.07);
+    --text: #f4f6f9;
+    --text-mid: #9aa4b5;
+    --text-dim: #5c6577;
+    --live: #ffb020;
+    --final: #5c6577;
+    --chrome: #4b4f52;
+    --chrome-font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --display-font: 'Oswald', 'Arial Narrow', sans-serif;
+    --mono-font: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+  }
+
+  /* Fixed 720x1280 reference canvas, scaled as one unit to fit the window.
+     At 1080x1920 the scale is exactly 1.5. */
+  #stage {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 720px;
+    height: 1280px;
+    transform-origin: 0 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  /* ---------- Chrome (header / footer) ---------- */
+  .bar {
+    flex: none;
+    background: var(--chrome);
+    font-family: var(--chrome-font);
+    font-size: 40px;
+    font-weight: 700;
+    line-height: 1.2;
+    padding: 21px 29px;
+    white-space: nowrap;
+    letter-spacing: 0.01em;
+  }
+  header.bar { text-align: center; }
+  footer.bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  #counter { font-variant-numeric: tabular-nums; }
+
+  /* ---------- Content zone ---------- */
+  main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 29px;
+    background: radial-gradient(circle at 50% 0%, #131a26 0%, var(--bg) 60%);
+  }
+
+  .card {
+    position: relative;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    background: var(--surface);
+    border-radius: 16px;
+    padding: 39px 29px 33px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-evenly;
+    overflow: hidden;
+    transition: opacity 280ms ease;
+  }
+  .card.out { opacity: 0; }
+
+  .team {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    width: 100%;
+  }
+
+  .name-row {
+    width: 100%;
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 12px;
+    white-space: nowrap;
+    font-family: var(--display-font);
+    line-height: 1.15;
+  }
+  .rank {
+    font-size: 29px;
+    font-weight: 700;
+    color: var(--live);
+  }
+  .name {
+    font-size: 57px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+  }
+
+  /* Score and logo share a fixed-height slot so states never shift layout. */
+  .mark {
+    height: 150px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .score {
+    font-family: var(--mono-font);
+    font-size: 141px;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
+  }
+  .logo {
+    width: 128px;
+    height: 128px;
+    object-fit: contain;
+  }
+
+  .accent {
+    width: 141px;
+    height: 8px;
+    border-radius: 4px;
+    background: var(--text-mid);
+  }
+
+  .status {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    /* Fixed height so the teams never shift; a lone line (e.g. FINAL) centers. */
+    height: 110px;
+  }
+  .status-detail:empty { display: none; }
+  .status-main {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-family: var(--display-font);
+    font-size: 43px;
+    font-weight: 700;
+    line-height: 1.3;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .status-detail {
+    height: 36px;
+    font-family: var(--display-font);
+    font-size: 28px;
+    font-weight: 500;
+    line-height: 36px;
+    color: var(--text-mid);
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .dot {
+    width: 21px;
+    height: 21px;
+    border-radius: 50%;
+    background: var(--live);
+    box-shadow: 0 0 12px 2px rgba(255,176,32,0.55);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
+  .state-live .status-main { color: var(--live); }
+  .state-post .status-main { color: var(--final); }
+  .state-pre  .status-main { color: var(--text); }
+
+  /* Final: losing side's label + bar go dim, its number only to --text-mid. */
+  .team.loser .name { color: var(--text-dim); }
+  .team.loser .score { color: var(--text-mid); }
+  .team.loser .accent { background: var(--text-dim) !important; }
+
+  .possession::before {
+    content: '';
+    display: inline-block;
+    width: 0; height: 0;
+    border-top: 11px solid transparent;
+    border-bottom: 11px solid transparent;
+    border-left: 16px solid var(--live);
+    margin-right: 4px;
+    align-self: center;
+  }
+
+  /* 6-second dwell indicator along the bottom edge of the card. */
+  .progress {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 4px;
+    width: 100%;
+    background: rgba(255,255,255,0.14);
+    transform-origin: 0 50%;
+    transform: scaleX(0);
+  }
+  .progress.run {
+    transform: scaleX(1);
+    transition: transform linear;
+  }
+
+  .message {
+    font-family: var(--display-font);
+    font-size: 57px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--text-mid);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <header class="bar" id="header">COLLEGE FOOTBALL</header>
+  <main>
+    <div class="card" id="card">
+      <div class="message">Loading scores</div>
+    </div>
+  </main>
+  <footer class="bar">
+    <span id="counter">&ndash;</span>
+    <span id="clock"></span>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const DWELL_MS = (parseFloat(params.get('interval')) || 6) * 1000;
+  // groups=80 is all FBS games. Pass ?groups=8 (SEC), ?groups=5 (Big Ten), etc.
+  // or ?top25=1 for ESPN's default (ranked-team) slate.
+  const GROUPS = params.get('top25') ? null : (params.get('groups') || '80');
+  const API = 'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard'
+    + '?limit=300' + (GROUPS ? '&groups=' + encodeURIComponent(GROUPS) : '');
+
+  const stage = document.getElementById('stage');
+  const card = document.getElementById('card');
+  const header = document.getElementById('header');
+  const counter = document.getElementById('counter');
+  const clock = document.getElementById('clock');
+
+  // ---------- Canvas scaling ----------
+  // Measure the root element, not innerWidth: some browsers/emulators grow
+  // innerWidth to include the unscaled 720px canvas before we shrink it.
+  function fit() {
+    const w = document.documentElement.clientWidth;
+    const h = document.documentElement.clientHeight;
+    const s = Math.min(w / 720, h / 1280);
+    const x = (w - 720 * s) / 2;
+    const y = (h - 1280 * s) / 2;
+    stage.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
+  }
+  addEventListener('resize', fit);
+  fit();
+
+  // ---------- Clock ----------
+  function tickClock() {
+    clock.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+  setInterval(tickClock, 1000);
+  tickClock();
+
+  // ---------- Data ----------
+  let games = [];
+  let lastGood = 0;
+
+  async function load() {
+    try {
+      const res = await fetch(API, { cache: 'no-store' });
+      if (!res.ok) throw new Error(res.status);
+      const data = await res.json();
+      games = (data.events || []).map(parseEvent).filter(Boolean);
+      lastGood = Date.now();
+      const wk = data.week && data.week.number;
+      const post = data.season && data.season.type === 3;
+      header.textContent = post ? 'COLLEGE FOOTBALL · BOWLS'
+        : wk ? `COLLEGE FOOTBALL · WEEK ${wk}` : 'COLLEGE FOOTBALL';
+    } catch (err) {
+      console.warn('Score fetch failed; keeping last data', err);
+    }
+    const anyLive = games.some(g => g.state === 'in');
+    setTimeout(load, anyLive ? 15000 : 60000);
+  }
+
+  function parseEvent(ev) {
+    const comp = ev.competitions && ev.competitions[0];
+    if (!comp) return null;
+    const side = ha => {
+      const c = comp.competitors.find(t => t.homeAway === ha);
+      const t = c.team || {};
+      const rank = c.curatedRank && c.curatedRank.current;
+      return {
+        id: t.id,
+        name: t.location || t.shortDisplayName || t.displayName || t.abbreviation,
+        abbr: t.abbreviation || '',
+        rank: rank && rank <= 25 ? rank : null,
+        score: c.score,
+        winner: !!c.winner,
+        color: pickColor(t.color, t.alternateColor),
+        logo: t.id ? `https://a.espncdn.com/i/teamlogos/ncaa/500-dark/${t.id}.png` : t.logo,
+        logoFallback: t.logo,
+      };
+    };
+    const st = ev.status || {};
+    const type = st.type || {};
+    const b = (comp.broadcasts || []).flatMap(x => x.names || []);
+    return {
+      id: ev.id,
+      date: new Date(ev.date),
+      timeValid: comp.timeValid !== false,
+      state: type.state,              // pre | in | post
+      statusName: type.name,
+      shortDetail: type.shortDetail || '',
+      period: st.period,
+      clock: st.displayClock,
+      network: b[0] || '',
+      situation: comp.situation || null,
+      away: side('away'),
+      home: side('home'),
+    };
+  }
+
+  // Team colors come from ESPN; skip ones too dark to see on the card.
+  function pickColor(...hexes) {
+    for (const h of hexes) {
+      if (!h || !/^[0-9a-f]{6}$/i.test(h)) continue;
+      const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+      const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      if (lum > 0.12) return '#' + h;
+    }
+    return 'var(--text-mid)';
+  }
+
+  // Live games first, then upcoming by kickoff, then most recent finals.
+  // Optional ?only=live,upcoming,final to limit which games rotate.
+  const ONLY = params.get('only') && params.get('only').split(',')
+    .map(s => ({ live: 'in', upcoming: 'pre', final: 'post' }[s.trim()])).filter(Boolean);
+
+  function ordered() {
+    const rank = { in: 0, pre: 1, post: 2 };
+    return games.filter(g => !ONLY || !ONLY.length || ONLY.includes(g.state)).sort((a, b) => {
+      const r = (rank[a.state] ?? 1) - (rank[b.state] ?? 1);
+      if (r) return r;
+      return a.state === 'post' ? b.date - a.date : a.date - b.date;
+    });
+  }
+
+  // ---------- Rendering ----------
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function periodLabel(p) {
+    if (p <= 4) return 'Q' + p;
+    return (p === 5 ? '' : (p - 4)) + 'OT';
+  }
+
+  function statusFor(g) {
+    if (g.state === 'in') {
+      let main;
+      if (g.statusName === 'STATUS_HALFTIME') main = 'Halftime';
+      else if (g.statusName === 'STATUS_END_PERIOD') main = 'End ' + periodLabel(g.period);
+      else main = `${periodLabel(g.period)} ${g.clock}`;
+      let detail = '';
+      const s = g.situation;
+      if (s && s.downDistanceText) {
+        const pos = [g.away, g.home].find(t => t.id === s.possession);
+        detail = (pos ? pos.abbr + ' · ' : '') + s.downDistanceText;
+      }
+      return { main, detail, dot: true };
+    }
+    if (g.state === 'post') {
+      const d = g.shortDetail.toUpperCase();
+      return { main: d.startsWith('FINAL') ? d : (d || 'FINAL'), detail: '' };
+    }
+    // pre-game (also postponed / canceled, which ESPN reports as "pre" or "post")
+    if (g.statusName && !/SCHEDULED/.test(g.statusName)) {
+      return { main: g.shortDetail || 'TBD', detail: g.network };
+    }
+    const day = g.date.toLocaleDateString([], { weekday: 'short' });
+    const time = g.timeValid
+      ? g.date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+      : 'TBD';
+    return { main: `${day} ${time}`, detail: g.network };
+  }
+
+  function teamHTML(t, g, bottom) {
+    const showScore = g.state !== 'pre' && t.score != null && t.score !== '';
+    const loser = g.state === 'post' && !t.winner && (g.away.winner || g.home.winner);
+    const hasPoss = g.state === 'in' && g.situation && g.situation.possession === t.id;
+    const name = `<div class="name-row">${t.rank ? `<span class="rank">#${t.rank}</span>` : ''}<span class="name${hasPoss ? ' possession' : ''}">${esc(t.name)}</span></div>`;
+    const mark = `<div class="mark">${showScore
+      ? `<span class="score">${esc(t.score)}</span>`
+      : `<img class="logo" alt="" src="${esc(t.logo)}" data-fallback="${esc(t.logoFallback)}">`}</div>`;
+    const accent = `<div class="accent" style="background:${t.color}"></div>`;
+    const parts = bottom ? [accent, mark, name] : [name, mark, accent];
+    return `<div class="team${loser ? ' loser' : ''}">${parts.join('')}</div>`;
+  }
+
+  function render(g) {
+    const s = statusFor(g);
+    card.className = 'card state-' + (g.state || 'pre');
+    card.innerHTML =
+      teamHTML(g.away, g, false) +
+      `<div class="status">
+         <div class="status-main">${s.dot ? '<span class="dot"></span>' : ''}<span>${esc(s.main)}</span></div>
+         <div class="status-detail">${esc(s.detail)}</div>
+       </div>` +
+      teamHTML(g.home, g, true) +
+      '<div class="progress"></div>';
+
+    card.querySelectorAll('img.logo').forEach(img => {
+      img.onerror = () => {
+        const fb = img.dataset.fallback;
+        if (fb && img.src !== fb) img.src = fb; else img.style.visibility = 'hidden';
+      };
+    });
+    fitText(card.querySelectorAll('.name-row'), 57, '.name');
+    fitText(card.querySelectorAll('.status-main'), 43);
+    fitText(card.querySelectorAll('.status-detail'), 28);
+
+    const bar = card.querySelector('.progress');
+    bar.style.transitionDuration = DWELL_MS + 'ms';
+    requestAnimationFrame(() => requestAnimationFrame(() => bar.classList.add('run')));
+  }
+
+  // Shrink long team names / details until they fit the card width.
+  function fitText(els, base, sel) {
+    const max = card.clientWidth - 58;
+    els.forEach(el => {
+      const target = sel ? el.querySelector(sel) : el;
+      let size = base;
+      target.style.fontSize = size + 'px';
+      while (el.scrollWidth > max && size > base * 0.55) {
+        size -= 2;
+        target.style.fontSize = size + 'px';
+      }
+    });
+  }
+
+  function preload(g) {
+    if (!g || g.state !== 'pre') return;
+    [g.away, g.home].forEach(t => { const i = new Image(); i.src = t.logo; });
+  }
+
+  // ---------- Rotation ----------
+  let currentId = null;
+
+  function next() {
+    const list = ordered();
+    if (!list.length) {
+      card.className = 'card';
+      card.innerHTML = `<div class="message">${lastGood ? 'No games this week' : 'Loading scores'}</div>`;
+      counter.textContent = '–';
+      setTimeout(next, lastGood ? DWELL_MS : 1000);
+      return;
+    }
+    const idx = list.findIndex(g => g.id === currentId);
+    const i = (idx + 1) % list.length;
+    const g = list[i];
+    const swap = () => {
+      currentId = g.id;
+      render(g);
+      counter.textContent = `${i + 1} / ${list.length}`;
+      card.classList.remove('out');
+      preload(list[(i + 1) % list.length]);
+    };
+    if (card.querySelector('.team')) {
+      card.classList.add('out');
+      setTimeout(swap, 280);
+    } else {
+      swap();
+    }
+    setTimeout(next, DWELL_MS);
+  }
+
+  load().then(next);
+})();
+</script>
+</body>
+</html>
