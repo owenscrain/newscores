@@ -485,11 +485,13 @@
     if (g.statusName && !/SCHEDULED/.test(g.statusName)) {
       return { main: g.shortDetail || 'TBD', detail: '' };
     }
-    const day = g.date.toLocaleDateString([], { weekday: 'short', timeZone: TZ });
-    const time = g.timeValid
-      ? g.date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: TZ })
-      : 'TBD';
-    return { main: `${day} ${time}`, detail: '' };
+    // Games later today show just the time; other days get the weekday too.
+    const ymd = d => d.toLocaleDateString('en-CA', { timeZone: TZ });
+    const isToday = ymd(g.date) === ymd(new Date());
+    const day = isToday ? 'Today' : g.date.toLocaleDateString([], { weekday: 'short', timeZone: TZ });
+    if (!g.timeValid) return { main: `${day} TBD`, detail: '' };
+    const time = g.date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: TZ });
+    return { main: isToday ? time : `${day} ${time}`, detail: '' };
   }
 
   const BALL_SVG = '<svg class="ball" viewBox="0 0 64 40" aria-hidden="true">'
