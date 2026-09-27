@@ -62,12 +62,14 @@
     white-space: nowrap;
     letter-spacing: 0.01em;
   }
-  header.bar { justify-content: space-between; }
-  footer.bar { justify-content: space-between; }
-  footer.bar {
+  header.bar, footer.bar { justify-content: space-between; }
+  /* Train bar on top, weather/clock bar on the bottom, each with a thin
+     white line along the edge that faces the game card. */
+  header.bar {
     background: #62361b;  /* CTA Brown Line */
-    border-top: 4px solid #a9a9a9;
+    border-bottom: 4px solid #fff;
   }
+  footer.bar { border-top: 4px solid #fff; }
   #clock, #temp, #trains { font-variant-numeric: tabular-nums; }
   .weather {
     display: flex;
@@ -251,6 +253,11 @@
     object-fit: contain;
     filter: brightness(0.7);
   }
+  /* NFL shield shown 30% smaller than the full-size logo box. */
+  .league-logo.small {
+    width: 392px;
+    height: 504px;
+  }
 
   .message {
     font-family: var(--display-font);
@@ -265,8 +272,8 @@
 <body>
 <div id="stage">
   <header class="bar">
-    <span class="weather"><svg id="wx-icon" viewBox="0 0 64 64" aria-hidden="true"></svg><span id="temp">&ndash;&deg;</span></span>
-    <span id="clock"></span>
+    <span>Loop</span>
+    <span id="trains">&ndash;</span>
   </header>
   <main>
     <div class="card" id="card">
@@ -274,8 +281,8 @@
     </div>
   </main>
   <footer class="bar">
-    <span>Loop</span>
-    <span id="trains">&ndash;</span>
+    <span class="weather"><svg id="wx-icon" viewBox="0 0 64 64" aria-hidden="true"></svg><span id="temp">&ndash;&deg;</span></span>
+    <span id="clock"></span>
   </footer>
 </div>
 
@@ -309,6 +316,7 @@
     nfl: {
       api: ESPN + 'nfl/scoreboard',
       logo: NFL_LOGO,
+      logoSmall: true,
       logoPath: t => `nfl/500-dark/${(t.abbreviation || '').toLowerCase()}`,
       name: t => t.name,
       ranked: false,
@@ -547,7 +555,7 @@
 
   function renderLogo() {
     card.className = 'card';
-    card.innerHTML = `<img class="league-logo" alt="" src="${activeLeague.logo}"><div class="progress"></div>`;
+    card.innerHTML = `<img class="league-logo${activeLeague.logoSmall ? ' small' : ''}" alt="" src="${activeLeague.logo}"><div class="progress"></div>`;
     startProgress();
   }
 
