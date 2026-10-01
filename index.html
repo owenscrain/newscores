@@ -62,15 +62,17 @@
     white-space: nowrap;
     letter-spacing: 0.01em;
   }
-  header.bar, footer.bar { justify-content: space-between; }
-  /* Train bar on top, weather/clock bar on the bottom, each with a thin
-     white line along the edge that faces the game card. */
+  /* League/week header on top, weather/clock bar on the bottom, each with a
+     thin white line along the edge that faces the game card. */
   header.bar {
-    background: #62361b;  /* CTA Brown Line */
+    justify-content: center;
     border-bottom: 4px solid #fff;
   }
-  footer.bar { border-top: 4px solid #fff; }
-  #clock, #temp, #trains { font-variant-numeric: tabular-nums; }
+  footer.bar {
+    justify-content: space-between;
+    border-top: 4px solid #fff;
+  }
+  #clock, #temp { font-variant-numeric: tabular-nums; }
   .weather {
     display: flex;
     align-items: center;
@@ -80,13 +82,6 @@
     width: 70px;
     height: 70px;
     flex: none;
-  }
-  /* Schedule-based prediction (train isn't reporting its live location). */
-  .train-sched { color: #a9a9a9; }
-  .train-unit {
-    font-size: 50px;
-    font-weight: 500;
-    opacity: 0.85;
   }
 
   /* ---------- Content zone ---------- */
@@ -271,10 +266,7 @@
 </head>
 <body>
 <div id="stage">
-  <header class="bar">
-    <span>Loop</span>
-    <span id="trains">&ndash;</span>
-  </header>
+  <header class="bar" id="header">COLLEGE FOOTBALL</header>
   <main>
     <div class="card" id="card">
       <div class="message">Loading scores</div>
@@ -300,12 +292,12 @@
   const LEAGUES = {
     cfb: {
       api: ESPN + 'college-football/scoreboard?limit=300' + (GROUPS ? '&groups=' + encodeURIComponent(GROUPS) : ''),
+      label: 'CFB',
+      postLabel: 'BOWLS',
       logo: NCAA_LOGO,
       logoPath: t => `ncaa/500-dark/${t.id}`,
       name: t => t.location,
       ranked: true,
-      // Only games with a Top 25 team, plus these teams every week
-      // (ESPN team IDs: 57 = Florida, 130 = Michigan). ?all=1 shows every FBS game.
       // Always: games with a Top 25 team, plus Florida and Michigan
       // (ESPN team IDs 57 and 130). While live: also any Big Ten or SEC game
       // (ESPN conference IDs 5 and 8). ?all=1 shows every FBS game.
@@ -315,6 +307,8 @@
     },
     nfl: {
       api: ESPN + 'nfl/scoreboard',
+      label: 'NFL',
+      postLabel: 'PLAYOFFS',
       logo: NFL_LOGO,
       logoSmall: true,
       logoPath: t => `nfl/500-dark/${(t.abbreviation || '').toLowerCase()}`,
@@ -334,7 +328,7 @@
 
   const stage = document.getElementById('stage');
   const card = document.getElementById('card');
-  const trains = document.getElementById('trains');
+  const header = document.getElementById('header');
   const wxIcon = document.getElementById('wx-icon');
   const temp = document.getElementById('temp');
   // Clock, kickoff times and weather are all for Chicago.
@@ -377,6 +371,19 @@
         .filter(g => !L.keep || L.keep(g));
       activeLeague = L;
       lastGood = Date.now();
+      const wk = data.week && data.week.number;
+      const post = data.season && data.season.type === 3;
+      const label = document.createElement('span');
+      // Short label so the header text can stay at full size.
+      label.textContent = post ? `${L.label} · ${L.postLabel}`
+        : wk ? `${L.label} · WEEK ${wk}` : L.label;
+      header.replaceChildren(label);
+      // Shrink the header text if it would run into the bar's side padding.
+      let size = 62;
+      header.style.fontSize = size + 'px';
+      while (label.offsetWidth > header.clientWidth - 58 && size > 30) {
+        header.style.fontSize = --size + 'px';
+      }
     } catch (err) {
       console.warn('Score fetch failed; keeping last data', err);
     }
@@ -586,36 +593,6 @@
     }
     setTimeout(next, DWELL_MS);
   }
-
-  // ---------- Next Brown Line train, Addison -> Loop ----------
-  // Fetched through /api/cta (a Vercel function) so the CTA API key stays
-  // private and the browser isn't blocked by the CTA API's missing CORS headers.
-  let lastTrain = 0;
-
-  async function loadTrain() {
-    try {
-      const res = await fetch('/api/cta', { cache: 'no-store' });
-      if (!res.ok) throw new Error(res.status);
-      const { arrivals } = await res.json();
-      // Up to two trains that are reporting a live location, e.g. "DUE, 11 min".
-      // If none are, fall back to the next scheduled departure, shown in grey.
-      const live = (arrivals || []).filter(a => !a.scheduled);
-      const shown = live.length ? live.slice(0, 2) : (arrivals || []).slice(0, 1);
-      const parts = shown.map(a => {
-        const text = a.approaching || a.minutes <= 1 ? 'DUE'
-          : `${a.minutes}<span class="train-unit">\u2009min</span>`;
-        return a.scheduled ? `<span class="train-sched">${text}</span>` : text;
-      });
-      trains.innerHTML = parts.length ? parts.join(',\u2002') : '\u2013';
-      lastTrain = Date.now();
-    } catch (err) {
-      console.warn('Train fetch failed', err);
-      // Don't leave an old arrival time up for long.
-      if (Date.now() - lastTrain > 2 * 60 * 1000) trains.textContent = '\u2013';
-    }
-    setTimeout(loadTrain, 20000);
-  }
-  loadTrain();
 
   // ---------- Chicago weather (Open-Meteo, no API key) ----------
   const WX_API = 'https://api.open-meteo.com/v1/forecast?latitude=41.8781&longitude=-87.6298'
